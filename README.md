@@ -180,3 +180,7 @@ models/node/         NodeAppRo (base) and one step per service
 models/credential/   CredentialRoAnaf, CredentialRoSmartBill, CredentialRoFgo, CredentialRoSameday, CredentialRoFanCourier, CredentialRoCargus
 util/                Anaf, Bnr, SmartBill, Fgo, Sameday, FanCourier, Cargus: the clients; Rest: their shared request
 ```
+
+## License
+
+GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
