@@ -1,7 +1,7 @@
 <?php
 
 /*
-    the base of the RegionalRO steps (not registered itself), as the core's integration bases (models\node\NodeAppNamecheap):
+    the base of the RegionalRO steps (not registered itself), as the core's integration bases (models\node\NodeAppShopify):
 	- the shape: one input, `success` (+ `error` when On error is "Continue on the `error` output"); in the picker's group Regional
 	- the settings: the ANAF credential (for the operations of CREDENTIAL_OPS; none: the step has no credential), the operation (static::OPERATIONS; one: not shown), the operation's
 	    own settings (operationFields(): each shown for its operations), At most (the lists: LISTS), timeout, result variable, on error
