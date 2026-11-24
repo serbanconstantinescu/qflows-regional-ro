@@ -9,7 +9,7 @@ A [qflows](https://example.com) plugin that adds steps and credentials for Roman
 | **ANAF e-Factura** | RO e-Factura (FCTEL/rest) | ANAF (SPV); validation and PDF need none |
 | **ANAF e-Transport** | RO e-Transport (ETRANSPORT/ws/v1) | ANAF (SPV) |
 | **SmartBill** | SmartBill Cloud API V1 | SmartBill |
-| **FGO** | FGO API v7 | FGO |
+| **FGO** | FGO API v2 | FGO |
 | **Sameday** | Sameday courier API | Sameday |
 | **FAN Courier** | FAN Courier API 2.0 (selfAWB) | FAN Courier |
 | **Cargus** | UrgentCargus API | Cargus |
@@ -105,16 +105,19 @@ Operations:
 
 ### FGO
 
-Credential: the company's CUI, the API user's private key (from FGO: Setari > Utilizatori), an optional platform URL (if empty, this installation's address is used), and FGO's test environment (`api-testuat.fgo.ro`).
+Credential: the company's CUI, its API key (from FGO: eCommerce > API > Chei API; Premium or Enterprise), an optional platform URL (a site address registered in FGO, Setari > eCommerce; if empty, this installation's address is used), and FGO's test environment (`api-testuat.fgo.ro`). Test checks the key with FGO.
 
 Operations:
-- Issue an invoice (the body uses FGO's own field names)
-- Get an invoice's PDF or status
+- Issue an invoice (the body uses FGO's own field names, snake_case)
+- List invoices
+- Get an invoice's status, PDF or payment link
+- Email an invoice
+- Get the e-Factura status, send an invoice to SPV
 - Cancel, delete or reverse an invoice
 - Attach an AWB
-- Record a payment (PREMIUM / ENTERPRISE plans)
-- List a nomenclature, articles or warehouses
-- Call the API (`CodUnic`, `Hash` and `PlatformaUrl` are added for you)
+- Record a payment (Premium / Enterprise plans)
+- List a nomenclature, articles (Enterprise) or warehouses
+- Call the API (any path after `/v2/`; the key, `Fgo-Cod-Unic` and `Fgo-Url-Platforma` are added for you)
 
 ## Couriers
 

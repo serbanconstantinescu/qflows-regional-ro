@@ -1,20 +1,28 @@
 <?php
 
 /*
-    FGO - invoices in FGO (API v7; util\Fgo), for the credential's company. Operations (setting `operation`):
-	invoice       issue an invoice (factura/emitere): the body as FGO names it (Document: Client, Continut, ...; Serie from Series, Valuta RON and TipFactura Factura when it has
-	              none): { Numar, Serie, Link (the PDF), LinkPlata }
-	print         an invoice's PDF (factura/print): its link, and the PDF saved in the project's Files (Save the PDF)
-	status        an invoice's value and what was paid (factura/getstatus)
-	cancel / delete / reverse   an invoice (anulare, stergere, stornare: the credit note's series, number, date optional)
-	awb           attach a courier's AWB to an invoice (factura/awb)
-	payment       record a payment of an invoice (factura/incasare; FGO: PREMIUM and ENTERPRISE): amount, type (nomenclature tipincasare), date
-	nomenclature  one of FGO's lists (tara, judet, tva, banca, tipincasare, tipfactura, tipclient, localitati of a county)
-	articles / warehouses       the articles (ENTERPRISE), the warehouses
-	api           Call the API: any POST (the path, the body; CodUnic, Hash and PlatformaUrl added: util\Fgo::call)
+    CLD: 2026-11-24T15:00:00+02:00: FGO - invoices in FGO, on FGO's API v2 (util\Fgo), for the credential's company. Operations (setting `operation`):
+	invoice       issue an invoice (POST facturi): the body as FGO names it (snake_case: client, articole, ...; serie from Series, valuta RON and tip_factura F when it has
+	              none): { serie, numar, stocuri }
+	invoices      the invoices issued (GET facturi): from / to (FGO: the last 30 days, at most a year), the client's CUI, paid or not
+	status        an invoice's value, what was paid and its payments (GET facturi/{serie}/{numar})
+	print         an invoice's PDF (genereaza-link-de-descarcare): its link, and the PDF saved in the project's Files (Save the PDF)
+	paymentLink   an invoice's payment link (genereaza-link-de-plata; a payment processor set up in FGO)
+	email         send an invoice by email (trimite-pe-email; empty address: the client's)
+	efactura      an invoice's last e-Factura event (GET .../efactura; null: none yet)
+	spv           send an invoice to ANAF's SPV (trimite-in-spv)
+	cancel / delete / reverse   an invoice (anuleaza, DELETE, storneaza: the credit note's series, number, date optional)
+	awb           attach a courier's AWB to an invoice (PUT .../awb)
+	payment       record a payment of an invoice (incasari; FGO: Premium and Enterprise): amount, type (nomenclature tipuri-incasare), date, account
+	nomenclature  one of FGO's lists (nomenclatoare/...: countries, counties, localities of a county, VAT rates, banks, currencies, invoice and payment types)
+	articles / warehouses       the articles (Enterprise), the warehouses
+	api           Call the API: any path after /v2/ (Fgo-Cod-Unic and the key added; Fgo-Url-Platforma too, but to GET)
+    FGO's lists need the fields they give (`fields`): all of each list's are asked (FIELDS)
 */
 
 namespace plugins\RegionalRO\models\node;
+
+use plugins\RegionalRO\util\Fgo;
 
 class NodeAppRoFgo extends NodeAppRo {
     public static $name = 'ro-fgo';
@@ -27,8 +35,13 @@ class NodeAppRoFgo extends NodeAppRo {
 
     const OPERATIONS = [
 	'invoice' => 'Issue an invoice',
-	'print' => 'Get an invoice\'s PDF',
+	'invoices' => 'List invoices',
 	'status' => 'Get an invoice\'s status',
+	'print' => 'Get an invoice\'s PDF',
+	'paymentLink' => 'Get an invoice\'s payment link',
+	'email' => 'Email an invoice',
+	'efactura' => 'Get the e-Factura status',
+	'spv' => 'Send an invoice to SPV',
 	'cancel' => 'Cancel an invoice',
 	'delete' => 'Delete an invoice',
 	'reverse' => 'Reverse an invoice',
@@ -39,46 +52,67 @@ class NodeAppRoFgo extends NodeAppRo {
 	'warehouses' => 'List warehouses',
 	'api' => 'Call the API',
     ];
-    const WRITES = [ 'invoice', 'cancel', 'delete', 'reverse', 'awb', 'payment', 'api' ];
-    const LISTS = [ 'nomenclature', 'articles', 'warehouses' ];
-    const CREDENTIAL_OPS = [ 'invoice', 'print', 'status', 'cancel', 'delete', 'reverse', 'awb', 'payment', 'nomenclature', 'articles', 'warehouses', 'api' ];
-    const PATHS = [ 'status' => 'factura/getstatus', 'cancel' => 'factura/anulare', 'delete' => 'factura/stergere' ];
-    const NOMENCLATURES = [ 'tara' => 'Countries', 'judet' => 'Counties', 'localitati' => 'Localities of a county', 'tva' => 'VAT rates', 'banca' => 'Banks',
-	'tipincasare' => 'Payment types', 'tipfactura' => 'Invoice types', 'tipclient' => 'Client types' ];
-    //FGO's articles: a page (its largest)
-    const PAGE = 200;
+    const WRITES = [ 'invoice', 'email', 'spv', 'cancel', 'delete', 'reverse', 'awb', 'payment', 'api' ];
+    const LISTS = [ 'invoices', 'nomenclature', 'articles', 'warehouses' ];
+    const CREDENTIAL_OPS = [ 'invoice', 'invoices', 'status', 'print', 'paymentLink', 'email', 'efactura', 'spv', 'cancel', 'delete', 'reverse', 'awb', 'payment',
+	'nomenclature', 'articles', 'warehouses', 'api' ];
+    //the operations of one invoice (Series and Number)
+    const ONE = [ 'status', 'print', 'paymentLink', 'email', 'efactura', 'spv', 'cancel', 'delete', 'reverse', 'awb', 'payment' ];
+    const NOMENCLATURES = [ 'tari' => 'Countries', 'judete' => 'Counties', 'localitati' => 'Localities of a county', 'cote-tva' => 'VAT rates', 'banci' => 'Banks',
+	'valute' => 'Currencies', 'tipuri-factura' => 'Invoice types', 'tipuri-incasare' => 'Payment types' ];
+    //the fields FGO gives of each list (all asked)
+    const FIELDS = [
+	'facturi' => 'data_emitere,data_scadenta,valoare_totala,valoare_fara_tva,valoare_tva,valoare_ramasa,valuta,status,status_plata,trimisa_pe_email,id_client,client,cod_unic_client',
+	'factura' => 'valoare,valoare_achitata,incasari(suma_incasata,data_incasare,valuta)',
+	'articole' => 'cod,nume,cod_bare,um,pret_unitar,cota_tva,stoc',
+	'gestiuni' => 'nume',
+	'tari' => 'nume,cod', 'judete' => 'nume,cod', 'localitati' => 'nume', 'cote-tva' => 'valoare', 'banci' => 'nume,bic,alias', 'valute' => 'nume',
+	'tipuri-factura' => 'nume,cod', 'tipuri-incasare' => 'nume',
+    ];
+    const PAID = [ '' => 'All', 'unpaid' => 'Not fully paid', 'paid' => 'Paid' ];
 
     protected static function operationFields() {
-	$one = [ 'print', 'status', 'cancel', 'delete', 'reverse', 'awb', 'payment' ];
 	return array_merge([
 	    self::field('document', 'Document', [ 'invoice' ], [ 'type' => 'textarea', 'required' => true,
-		'help' => 'A JSON object as FGO names it, e.g. {"Client": {"Denumire": "...", "Tip": "PJ", "CodUnic": "...", "Tara": "RO", "Judet": "Bucuresti"}, "Continut": '
-		    . '[{"Denumire": "...", "NrProduse": 1, "UM": "BUC", "CotaTVA": 21, "PretUnitar": 100}]}; Serie: from Series; Valuta RON, TipFactura Factura when not given',
+		'help' => 'A JSON object as FGO names it, e.g. {"client": {"denumire": "...", "tip": "PJ", "cod_unic": "...", "tara": "Romania", "cod_judet": "B", "localitate": "...", '
+		    . '"adresa": "..."}, "articole": [{"denumire": "...", "nr_produse": 1, "um": "BUC", "cota_tva": 0.21, "pret_unitar": 100}]}; serie: from Series; valuta RON, '
+		    . 'tip_factura F when not given; id_extern + "verificare_duplicat": true to issue it once',
 		'ui' => [ 'rows' => 6, 'expression' => true, 'code' => true, 'agent' => [ 'type' => 'object' ] ] ]),
-	    self::field('series', 'Series', array_merge([ 'invoice' ], $one), [ 'help' => 'As in FGO (Setari > Serii documente); issuing: empty takes the document\'s Serie',
+	    self::field('series', 'Series', array_merge([ 'invoice' ], self::ONE), [ 'help' => 'Of an invoice register in FGO; issuing: empty takes the document\'s serie',
 		'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
-	    self::field('number', 'Number', $one, [ 'required' => true, 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
+	    self::field('number', 'Number', self::ONE, [ 'required' => true, 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('savePdf', 'Save the PDF', [ 'print' ], [ 'type' => 'switch', 'default' => true, 'help' => 'In the project\'s Files; off: only its link', 'ui' => [ 'width' => 4 ] ]),
+	    self::field('email', 'Email', [ 'email' ], [ 'help' => 'Empty: the client\'s', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('stornoSeries', 'Credit note series', [ 'reverse' ], [ 'help' => 'Empty: FGO\'s', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('stornoNumber', 'Credit note number', [ 'reverse' ], [ 'help' => 'Empty: the next', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('date', 'Date', [ 'reverse', 'payment' ], [ 'help' => 'YYYY-MM-DD; empty: today', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('awbNumber', 'AWB', [ 'awb' ], [ 'required' => true, 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('amount', 'Amount', [ 'payment' ], [ 'required' => true, 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
-	    self::field('paymentType', 'Payment type', [ 'payment' ], [ 'required' => true, 'default' => 'Ordin de plata', 'help' => 'From the nomenclature tipincasare',
+	    self::field('paymentType', 'Payment type', [ 'payment' ], [ 'required' => true, 'default' => 'Banca', 'help' => 'A name of the nomenclature Payment types (e.g. Banca)',
 		'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
-	    self::field('account', 'Collection account', [ 'payment' ], [ 'help' => 'Empty: FGO\'s', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
-	    self::field('nomenclature', 'Nomenclature', [ 'nomenclature' ], [ 'type' => 'select', 'default' => 'tva', 'choices' => self::NOMENCLATURES, 'ui' => [ 'width' => 4 ] ]),
+	    self::field('account', 'Collection account', [ 'payment' ], [ 'help' => 'As in FGO (Setari > Incasare); empty: the type\'s', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
+	    self::field('from', 'Issued from', [ 'invoices' ], [ 'help' => 'YYYY-MM-DD; empty: 30 days ago (at most a year to To)', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
+	    self::field('to', 'Issued to', [ 'invoices' ], [ 'help' => 'YYYY-MM-DD; empty: today', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
+	    self::field('clientCui', 'Client CUI', [ 'invoices' ], [ 'help' => 'Empty: all the clients', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
+	    self::field('paid', 'Paid', [ 'invoices' ], [ 'type' => 'select', 'default' => '', 'choices' => self::PAID, 'ui' => [ 'width' => 4 ] ]),
+	    self::field('nomenclature', 'Nomenclature', [ 'nomenclature' ], [ 'type' => 'select', 'default' => 'cote-tva', 'choices' => self::NOMENCLATURES, 'ui' => [ 'width' => 4 ] ]),
 	    self::field('county', 'County code', [ 'nomenclature' ], [ 'help' => 'Of Localities (e.g. B, CJ)', 'ui' => [ 'expression' => 'text', 'width' => 4,
 		'showIf' => [ 'key' => 'nomenclature', 'operator' => 'eq', 'value' => 'localitati' ] ] ]),
-	], self::apiFields('After https://api.fgo.ro/v1/, e.g. factura/listfacturiasociate (CodUnic, Hash, PlatformaUrl are added)', 'A JSON object sent as the body'));
+	], self::apiFields('After https://api.fgo.ro/v2/, e.g. facturi/FGO/1201/asociate (the key, Fgo-Cod-Unic and, but to GET, Fgo-Url-Platforma are added; a list asks fields=)',
+	    'A JSON object sent as the body; empty: none'));
     }
 
     protected static function resultOf($operation) {
 	if ($operation === 'invoice')
-	    return [ 'type' => 'object', 'info' => '{ Numar, Serie, Link, LinkPlata }', 'fields' => [ 'Numar' => [ 'type' => 'string' ], 'Serie' => [ 'type' => 'string' ],
-		'Link' => [ 'type' => 'string', 'info' => 'the PDF' ] ] ];
+	    return [ 'type' => 'object', 'info' => '{ serie, numar, stocuri }', 'fields' => [ 'serie' => [ 'type' => 'string' ], 'numar' => [ 'type' => 'string' ],
+		'stocuri' => [ 'type' => 'array', 'info' => 'the stock left of the articles, when FGO shows it' ] ] ];
 	if ($operation === 'print')
 	    return [ 'type' => 'object', 'info' => '{ link, file }', 'fields' => [ 'link' => [ 'type' => 'string' ], 'file' => [ 'type' => 'object', 'info' => '{ id, filename, size, contentType }' ] ] ];
+	if ($operation === 'paymentLink')
+	    return [ 'type' => 'object', 'info' => '{ link }', 'fields' => [ 'link' => [ 'type' => 'string' ] ] ];
+	if ($operation === 'status')
+	    return [ 'type' => 'object', 'info' => '{ serie, numar, valoare, valoare_achitata, incasari }', 'fields' => [ 'serie' => [ 'type' => 'string' ], 'numar' => [ 'type' => 'string' ],
+		'valoare' => [ 'type' => 'number' ], 'valoare_achitata' => [ 'type' => 'number' ], 'incasari' => [ 'type' => 'array', 'info' => '{ suma_incasata, data_incasare, valuta }' ] ] ];
 	return null;
     }
 
@@ -86,83 +120,107 @@ class NodeAppRoFgo extends NodeAppRo {
 	$invoice = function() use ($text) {
 	    if ($text('series') === '' || $text('number') === '')
 		throw new \RuntimeException('Series and Number: both needed');
-	    return [ 'Serie' => $text('series'), 'Numar' => $text('number') ];
+	    return [ $text('series'), $text('number'), $text('series') . ' ' . $text('number') ];
 	};
 	switch($operation) {
 	    case 'invoice':
 		$doc = $this->jsonOf($value, 'document', 'Document');
-		if (trim((string)($doc['Client']['Denumire'] ?? '')) === '')
-		    throw new \RuntimeException('Document: Client.Denumire (the client\'s name) is needed');
+		if (empty($doc['articole']) || !is_array($doc['articole']))
+		    throw new \RuntimeException('Document: articole (at least one line) is needed');
 		if ($text('series') !== '')
-		    $doc['Serie'] = $text('series');
-		$doc += [ 'Valuta' => 'RON', 'TipFactura' => 'Factura' ];
-		$f = (array)($this->client->call('factura/emitere', $doc)['Factura'] ?? []);
-		return [ $f, 'invoice ' . trim(($f['Serie'] ?? '') . ' ' . ($f['Numar'] ?? '')) ];
+		    $doc['serie'] = $text('series');
+		if (trim((string)($doc['serie'] ?? '')) === '')
+		    throw new \RuntimeException('Series: none given, nor serie in the document');
+		$doc += [ 'valuta' => 'RON', 'tip_factura' => 'F' ];
+		$f = (array)$this->client->call('POST', 'facturi', [], $doc, true);
+		return [ $f, 'invoice ' . trim(($f['serie'] ?? '') . ' ' . ($f['numar'] ?? '')) ];
+	    case 'invoices':
+		$paid = (string)$this->cfg('paid', '');
+		$query = array_filter([ 'data_emitere_de_la' => $text('from') !== '' ? $this->dateOf($text, 'from', 'Issued from') : null,
+		    'data_emitere_pana_la' => $text('to') !== '' ? $this->dateOf($text, 'to', 'Issued to') : null,
+		    'cod_unic_client' => $text('clientCui') !== '' ? (\plugins\RegionalRO\util\Anaf::cui($text('clientCui')) ?? $text('clientCui')) : null,
+		    'restanta' => $paid === 'unpaid' ? 'true' : ($paid === 'paid' ? 'false' : null), 'fields' => self::FIELDS['facturi'] ], fn($v) => $v !== null);
+		[ $items ] = $this->client->all('facturi', $query, $this->maxItems());
+		return $this->listResult($items, 'invoice');
+	    case 'status':
+		[ $s, $n, $name ] = $invoice();
+		$r = (array)$this->client->call('GET', Fgo::path($s, $n), [ 'fields' => self::FIELDS['factura'] ]);
+		return [ $r, "invoice {$name}: paid " . ($r['valoare_achitata'] ?? '?') . ' of ' . ($r['valoare'] ?? '?') ];
 	    case 'print':
-		$inv = $invoice();
-		$link = (string)($this->client->call('factura/print', $inv)['Factura']['Link'] ?? '');
+		[ $s, $n, $name ] = $invoice();
+		$link = (string)($this->client->call('POST', Fgo::path($s, $n, 'genereaza-link-de-descarcare'))['link'] ?? '');
 		if ($link === '')
 		    throw new \RuntimeException('FGO gave no link to the PDF');
 		$file = null;
 		if ($this->cfg('savePdf', true)) {
-		    $r = \plugins\RegionalRO\util\Rest::send('GET', $link, [ 'redirects' => 3 ], $this->start, $this->timeout);
+		    $r = \plugins\RegionalRO\util\Rest::send('GET', $link, [ 'redirects' => 5 ], $this->start, $this->timeout);
 		    if ($r['status'] >= 400 || !str_starts_with((string)$r['body'], '%PDF'))
 			throw new \RuntimeException("the PDF could not be read (HTTP {$r['status']})");
-		    $file = $this->saveFile("factura-{$inv['Serie']}-{$inv['Numar']}.pdf", $r['body']);
+		    $file = $this->saveFile("factura-{$s}-{$n}.pdf", $r['body']);
 		}
-		return [ [ 'link' => $link, 'file' => $file ], "invoice {$inv['Serie']} {$inv['Numar']}" . ($file ? ": {$file['filename']}" : ": {$link}") ];
-	    case 'status':
+		return [ [ 'link' => $link, 'file' => $file ], "invoice {$name}" . ($file ? ": {$file['filename']}" : ": {$link}") ];
+	    case 'paymentLink':
+		[ $s, $n, $name ] = $invoice();
+		$link = (string)($this->client->call('POST', Fgo::path($s, $n, 'genereaza-link-de-plata'))['link'] ?? '');
+		return [ [ 'link' => $link ], "invoice {$name}: {$link}" ];
+	    case 'email':
+		[ $s, $n, $name ] = $invoice();
+		$r = $this->client->call('POST', Fgo::path($s, $n, 'trimite-pe-email'), [], $text('email') !== '' ? [ 'email' => $text('email') ] : (object)[]);
+		return [ $r, "invoice {$name} sent" . ($text('email') !== '' ? ' to ' . $text('email') : '') ];
+	    case 'efactura':
+		[ $s, $n, $name ] = $invoice();
+		$r = $this->client->call('GET', Fgo::path($s, $n, 'efactura'));
+		return [ $r, "invoice {$name}: " . (is_array($r) ? (string)($r['status'] ?? '?') : 'no e-Factura event yet') ];
+	    case 'spv':
+		[ $s, $n, $name ] = $invoice();
+		$r = $this->client->call('POST', Fgo::path($s, $n, 'trimite-in-spv'));
+		return [ $r, "invoice {$name} sent to SPV" ];
 	    case 'cancel':
+		[ $s, $n, $name ] = $invoice();
+		$r = $this->client->call('POST', Fgo::path($s, $n, 'anuleaza'), [], null, true);
+		return [ $r, "invoice {$name} cancelled" ];
 	    case 'delete':
-		$inv = $invoice();
-		$r = $this->client->call(self::PATHS[$operation], $inv);
-		return [ $operation === 'status' ? (array)($r['Factura'] ?? $r) : $r, "invoice {$inv['Serie']} {$inv['Numar']}: " . ($operation === 'status'
-		    ? 'paid ' . ($r['Factura']['ValoareAchitata'] ?? '?') . ' of ' . ($r['Factura']['Valoare'] ?? '?') : (($r['Message'] ?? '') ?: $operation)) ];
+		[ $s, $n, $name ] = $invoice();
+		$r = $this->client->call('DELETE', Fgo::path($s, $n), [], null, true);
+		return [ $r, "invoice {$name} deleted" ];
 	    case 'reverse':
-		$inv = $invoice();
-		$r = $this->client->call('factura/stornare', $inv + array_filter([ 'SerieStorno' => $text('stornoSeries'), 'NumarStorno' => $text('stornoNumber'),
-		    'DataEmitere' => $text('date') !== '' ? $this->dateOf($text) : null ], fn($v) => $v !== null && $v !== ''));
-		$f = (array)($r['Factura'] ?? $r);
-		return [ $f, "invoice {$inv['Serie']} {$inv['Numar']} reversed" . (isset($f['Numar']) ? " by {$f['Serie']} {$f['Numar']}" : '') ];
+		[ $s, $n, $name ] = $invoice();
+		$f = (array)$this->client->call('POST', Fgo::path($s, $n, 'storneaza'), [], (object)array_filter([ 'serie_storno' => $text('stornoSeries'),
+		    'numar_storno' => $text('stornoNumber'), 'data_emitere' => $text('date') !== '' ? $this->dateOf($text) : '' ], fn($v) => $v !== ''), true);
+		return [ $f, "invoice {$name} reversed" . (isset($f['numar']) ? ' by ' . trim(($f['serie'] ?? '') . ' ' . $f['numar']) : '') ];
 	    case 'awb':
-		$inv = $invoice();
-		$r = $this->client->call('factura/awb', $inv + [ 'AWB' => $text('awbNumber') ]);
-		return [ $r, "invoice {$inv['Serie']} {$inv['Numar']}: AWB " . $text('awbNumber') ];
+		[ $s, $n, $name ] = $invoice();
+		$r = $this->client->call('PUT', Fgo::path($s, $n, 'awb'), [], [ 'awb' => $text('awbNumber') ]);
+		return [ $r, "invoice {$name}: AWB " . $text('awbNumber') ];
 	    case 'payment':
-		$inv = $invoice();
+		[ $s, $n, $name ] = $invoice();
 		$amount = str_replace([ ' ', ',' ], [ '', '.' ], $text('amount'));
 		if (!is_numeric($amount))
 		    throw new \RuntimeException('Amount: not a number');
-		$r = $this->client->call('factura/incasare', array_filter([ 'NumarFactura' => $inv['Numar'], 'SerieFactura' => $inv['Serie'], 'TipIncasare' => $text('paymentType'),
-		    'SumaIncasata' => round((float)$amount, 2), 'DataIncasare' => $this->dateOf($text) . ' ' . date('H:i:s'), 'ContIncasare' => $text('account') ], fn($v) => $v !== ''));
-		return [ $r, "invoice {$inv['Serie']} {$inv['Numar']}: {$amount} paid" ];
+		$r = (array)$this->client->call('POST', Fgo::path($s, $n, 'incasari'), [], array_filter([ 'suma_incasata' => round((float)$amount, 2),
+		    'tip_incasare' => $text('paymentType'), 'data_incasare' => $this->dateOf($text), 'cont_incasare' => $text('account') ], fn($v) => $v !== ''));
+		return [ $r, "invoice {$name}: {$amount} paid" . (isset($r['numar_incasare']) ? ' (' . trim(($r['serie_incasare'] ?? '') . ' ' . $r['numar_incasare']) . ')' : '') ];
 	    case 'nomenclature':
-		$type = isset(self::NOMENCLATURES[(string)$this->cfg('nomenclature', 'tva')]) ? (string)$this->cfg('nomenclature', 'tva') : 'tva';
+		$type = isset(self::NOMENCLATURES[(string)$this->cfg('nomenclature', 'cote-tva')]) ? (string)$this->cfg('nomenclature', 'cote-tva') : 'cote-tva';
+		$query = [ 'fields' => self::FIELDS[$type] ];
 		if ($type === 'localitati') {
 		    if ($text('county') === '')
 			throw new \RuntimeException('County code: needed for the localities');
-		    $type .= '?judet=' . rawurlencode($text('county'));
+		    $query['cod_judet'] = $text('county');
 		}
-		return $this->listResult((array)($this->client->nomenclature($type)['List'] ?? []), 'value');
+		[ $items ] = $this->client->all('nomenclatoare/' . $type, $query, $this->maxItems());
+		return $this->listResult($items, 'value');
 	    case 'articles':
-		$all = [];
-		for ($page = 1; count($all) < $this->maxItems(); $page++) {
-		    $res = (array)($this->client->call('articol/list', [ 'NrPagina' => $page, 'NrArticole' => self::PAGE ])['Result'] ?? []);
-		    $list = (array)($res['List'] ?? []);
-		    array_push($all, ...$list);
-		    if (count($list) < self::PAGE || count($all) >= (int)($res['Total'] ?? 0))
-			break;
-		    //FGO: 1 request in 5 seconds for the articles
-		    sleep(5);
-		}
-		return $this->listResult($all, 'article');
+		[ $items ] = $this->client->all('articole', [ 'fields' => self::FIELDS['articole'] ], $this->maxItems());
+		return $this->listResult($items, 'article');
 	    case 'warehouses':
-		return $this->listResult((array)($this->client->call('articol/gestiune', [])['Result']['List'] ?? []), 'warehouse');
+		[ $items ] = $this->client->all('gestiuni', [ 'fields' => self::FIELDS['gestiuni'] ], $this->maxItems());
+		return $this->listResult($items, 'warehouse');
 	    case 'api':
-		[ , $path, , $body ] = $this->apiCall($text, $value);
+		[ $method, $path, $query, $body ] = $this->apiCall($text, $value);
 		if ($body !== null && (!is_array($body) || array_is_list($body)))
 		    throw new \RuntimeException('Body: a JSON object');
-		return [ $this->client->call($path, (array)$body), "POST {$path}" ];
+		return [ $this->client->call($method, ltrim(preg_replace('~^v2/~', '', $path), '/'), $query, $body, $method !== 'GET'), "{$method} {$path}" ];
 	}
 	throw new \RuntimeException("unknown operation `{$operation}`");
     }

@@ -15,7 +15,8 @@
       util/                 Anaf (ANAF's services), Bnr (BNR's rates)
     the invoicing and courier services, each a step, a credential (group Romania) and a client (util/; Rest: their requests):
 	  NodeAppRoSmartBill    SmartBill: invoices, proformas, payments, PDF, email, series, VAT rates, stocks (CredentialRoSmartBill, `smartbill`)
-	  NodeAppRoFgo          FGO: invoices (issue, PDF, status, cancel, delete, reverse, AWB, payment), nomenclatures, articles (CredentialRoFgo, `fgo`)
+	  NodeAppRoFgo          FGO (API v2): invoices (issue, list, PDF, payment link, email, e-Factura, SPV, status, cancel, delete, reverse, AWB, payment), nomenclatures, articles
+	                        (CredentialRoFgo, `fgo`)
 	  NodeAppRoSameday      Sameday: AWB, cost, status, label, delete, pickup points, services, easyboxes, cities (CredentialRoSameday, `sameday`)
 	  NodeAppRoFanCourier   FAN Courier: AWB, tariff, tracking, labels, delete, services, counties, localities (CredentialRoFanCourier, `fancourier`)
 	  NodeAppRoCargus       Cargus: AWB, price, details, trace, documents, delete, pickup locations, counties, localities (CredentialRoCargus, `cargus`)
