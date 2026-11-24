@@ -335,11 +335,11 @@ abstract class NodeAppRo extends \models\wf\WfNode {
 	];
     }
 
-    //Call the API: [ method, path (no scheme, no ..), query, body (null: none) ]
+    //CLD: 2026-11-24T13:00:00+02:00: Call the API: [ method, path (no scheme, no .., no space or backslash), query, body (null: none) ]
     protected function apiCall(\Closure $text, \Closure $value) {
 	$method = in_array((string)$this->cfg('apiMethod', 'GET'), [ 'GET', 'POST', 'PUT', 'DELETE' ], true) ? (string)$this->cfg('apiMethod', 'GET') : 'GET';
 	$path = ltrim($text('apiPath'), '/');
-	if ($path === '' || preg_match('~^[a-z]+:|\.\.|[\s\\]~i', $path))
+	if ($path === '' || preg_match('~^[a-z]+:|\.\.|[\s\\\\]~i', $path))
 	    throw new \RuntimeException('Path: a path of the API, such as ' . 'invoice/pdf (no address, no ..)');
 	$body = $value('apiBody');
 	if (is_string($body)) {
