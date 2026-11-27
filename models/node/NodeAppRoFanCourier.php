@@ -71,6 +71,8 @@ class NodeAppRoFanCourier extends NodeAppRo {
 		'ui' => [ 'rows' => 2, 'expression' => true, 'code' => true, 'advanced' => true, 'agent' => [ 'type' => 'object' ] ] ]),
 	    self::field('awbs', 'AWBs', [ 'tracking', 'label', 'delete' ], [ 'required' => true, 'help' => 'Separated by commas, or a list (delete: one)', 'ui' => $w(8) + [ 'agent' => [ 'type' => 'string' ] ] ]),
 	    self::field('format', 'Format', [ 'label' ], [ 'type' => 'select', 'default' => 'A6', 'choices' => [ 'A4' => 'A4', 'A5' => 'A5', 'A6' => 'A6' ], 'ui' => [ 'width' => 4 ] ]),
+	    //CLD: 2026-11-27T12:00:00+02:00: the folder of Files the saved files go in
+	    self::filesFolderField([ 'ops' => [ 'label' ] ]),
 	    self::field('countyName', 'County', [ 'localities' ], [ 'help' => 'Empty: all', 'ui' => $w(4) ]),
 	], self::apiFields('After https://api.fancourier.ro/, e.g. reports/awb (clientId: add it to the query)', 'A JSON object sent as the body; empty: none'));
     }

@@ -73,6 +73,8 @@ class NodeAppRoSmartBill extends NodeAppRo {
 	    self::field('warehouse', 'Warehouse', [ 'stocks' ], [ 'help' => 'Empty: all', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('product', 'Product name', [ 'stocks' ], [ 'help' => 'Empty: all', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('productCode', 'Product code', [ 'stocks' ], [ 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
+	    //CLD: 2026-11-27T12:00:00+02:00: the folder of Files the saved files go in
+	    self::filesFolderField([ 'ops' => [ 'pdf' ] ]),
 	], self::apiFields('After https://ws.smartbill.ro/SBORO/api/, e.g. invoice/paymentstatus (the query names cif itself)'));
     }
 

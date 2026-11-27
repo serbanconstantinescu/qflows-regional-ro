@@ -293,7 +293,7 @@ abstract class NodeAppRo extends \models\wf\WfNode {
     //$content saved as a file of the project named $filename: [ id, filename, size, contentType ]
     protected function saveFile($filename, $content) {
 	$filename = preg_replace('~[\\\\/:*?"<>|\x00-\x1f]+~', '_', (string)$filename);
-	$id = \models\File::createFromString($filename, (string)$content, [ 'metadata' => [
+	$id = \models\File::createFromString($filename, (string)$content, [ 'folder' => $this->filesFolder(), 'metadata' => [
 	    'project' => $this->exec->project,
 	    'aid' => $this->exec->aid,
 	    'owner' => null,

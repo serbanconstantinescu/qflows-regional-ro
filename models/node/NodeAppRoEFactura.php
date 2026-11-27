@@ -72,6 +72,8 @@ class NodeAppRoEFactura extends NodeAppRo {
 		'ui' => [ 'width' => 6 ] ]),
 	    self::field('filename', 'File name', [ 'download', 'pdf' ], [ 'help' => 'Empty: from ANAF\'s names (download), invoice-<date>.pdf (pdf)',
 		'ui' => [ 'expression' => 'text', 'width' => 6 ] ]),
+	    //CLD: 2026-11-27T12:00:00+02:00: the folder of Files the saved files go in
+	    self::filesFolderField([ 'ops' => [ 'download', 'pdf' ] ]),
 	];
     }
 

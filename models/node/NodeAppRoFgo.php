@@ -82,6 +82,8 @@ class NodeAppRoFgo extends NodeAppRo {
 		'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('number', 'Number', self::ONE, [ 'required' => true, 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('savePdf', 'Save the PDF', [ 'print' ], [ 'type' => 'switch', 'default' => true, 'help' => 'In the project\'s Files; off: only its link', 'ui' => [ 'width' => 4 ] ]),
+	    //CLD: 2026-11-27T12:00:00+02:00: the folder of Files the saved files go in
+	    self::filesFolderField([ 'ui' => [ 'showIf' => "data.operation === 'print' && !!data.savePdf" ] ]),
 	    self::field('email', 'Email', [ 'email' ], [ 'help' => 'Empty: the client\'s', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('stornoSeries', 'Credit note series', [ 'reverse' ], [ 'help' => 'Empty: FGO\'s', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),
 	    self::field('stornoNumber', 'Credit note number', [ 'reverse' ], [ 'help' => 'Empty: the next', 'ui' => [ 'expression' => 'text', 'width' => 4 ] ]),

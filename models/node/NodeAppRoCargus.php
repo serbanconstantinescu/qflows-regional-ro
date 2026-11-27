@@ -74,6 +74,8 @@ class NodeAppRoCargus extends NodeAppRo {
 		'ui' => [ 'rows' => 2, 'expression' => true, 'code' => true, 'advanced' => true, 'agent' => [ 'type' => 'object' ] ] ]),
 	    self::field('awbs', 'AWBs', [ 'get', 'trace', 'pdf', 'delete' ], [ 'required' => true, 'help' => 'Separated by commas, or a list (get, delete: one)', 'ui' => $w(8) + [ 'agent' => [ 'type' => 'string' ] ] ]),
 	    self::field('format', 'Format', [ 'pdf' ], [ 'type' => 'select', 'default' => '1', 'choices' => [ '0' => 'A4', '1' => 'Label 10x14' ], 'ui' => [ 'width' => 4 ] ]),
+	    //CLD: 2026-11-27T12:00:00+02:00: the folder of Files the saved files go in
+	    self::filesFolderField([ 'ops' => [ 'pdf' ] ]),
 	    self::field('countyId', 'County id', [ 'localities' ], [ 'required' => true, 'help' => 'List counties', 'ui' => $w(4) ]),
 	], self::apiFields('After https://urgentcargus.azure-api.net/api/, e.g. Awbs/GetByDate', 'A JSON object (or list) sent as the body; empty: none'));
     }

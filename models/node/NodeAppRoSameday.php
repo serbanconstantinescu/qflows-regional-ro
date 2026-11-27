@@ -73,6 +73,8 @@ class NodeAppRoSameday extends NodeAppRo {
 		'ui' => [ 'rows' => 2, 'expression' => true, 'code' => true, 'advanced' => true, 'agent' => [ 'type' => 'object' ] ] ]),
 	    self::field('awbNumber', 'AWB', [ 'status', 'pdf', 'delete' ], [ 'required' => true, 'ui' => $w(4) ]),
 	    self::field('format', 'Format', [ 'pdf' ], [ 'type' => 'select', 'default' => 'A6', 'choices' => [ 'A6' => 'A6 (label)', 'A4' => 'A4' ], 'ui' => [ 'width' => 4 ] ]),
+	    //CLD: 2026-11-27T12:00:00+02:00: the folder of Files the saved files go in
+	    self::filesFolderField([ 'ops' => [ 'pdf' ] ]),
 	    self::field('countyId', 'County id', [ 'cities' ], [ 'help' => 'Sameday\'s; empty: all', 'ui' => $w(4) ]),
 	    self::field('cityName', 'Name', [ 'cities' ], [ 'help' => 'Containing; empty: all', 'ui' => $w(4) ]),
 	], self::apiFields('After https://api.sameday.ro/, e.g. api/client/awb/<awb>/status', 'A JSON object sent as form fields (as Sameday reads them); empty: none'));
