@@ -21,7 +21,7 @@
 	  NodeAppRoFanCourier   FAN Courier: AWB, tariff, tracking, labels, delete, services, counties, localities (CredentialRoFanCourier, `fancourier`)
 	  NodeAppRoCargus       Cargus: AWB, price, details, trace, documents, delete, pickup locations, counties, localities (CredentialRoCargus, `cargus`)
 	each with Call the API (any call of the service, through the credential)
-    the steps as the tools of AI steps (the core's util\AgentTools, hook agent:families): ANAF Company Lookup and BNR Exchange Rates (public: no credential;
+    the steps as the tools of AI steps (the core's util\agent\Tools, hook agent:families): ANAF Company Lookup and BNR Exchange Rates (public: no credential;
     tools ro_company_lookup, ro_bnr_rates, ro_bnr_convert), ANAF e-Factura / e-Transport (an ANAF credential; anaf_efactura_<operation>, anaf_etransport_<operation>)
 */
 
